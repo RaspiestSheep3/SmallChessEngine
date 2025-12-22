@@ -2,9 +2,18 @@ import subprocess
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.animation import FuncAnimation
-
+from time import sleep
 #Engine stuff
 engine = subprocess.Popen(
+    ["./engine.exe"],
+    stdin=subprocess.PIPE,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.DEVNULL,
+    text=True,
+    bufsize=1
+)
+
+engine2 = subprocess.Popen(
     ["./engine.exe"],
     stdin=subprocess.PIPE,
     stdout=subprocess.PIPE,
@@ -37,7 +46,56 @@ PIECE_SYMBOLS = {
 }
 
 # Example sequence of moves
-moves = ["e2e4", "e7e5", "g1f3", "b8c6", "f1c4", "g8f6"]
+moves = []
+
+# Read engine 1 output
+for i in range(100):
+    moves_str = " ".join(moves)
+    position_cmd = f"position startpos moves {moves_str}\n"
+
+    print(position_cmd)
+
+    # Send to engine 1
+    engine.stdin.write(position_cmd)
+    engine.stdin.flush()
+    engine.stdin.write("go\n")
+    engine.stdin.flush()
+    
+    line = engine.stdout.readline()
+    if not line:
+        print("Broke")
+        break
+    #print("Engine1 says:", line.strip())
+    
+    #Processing the move 
+    line = line.strip()
+    if line.startswith("bestmove"):
+        move = line.split()[1]
+    
+        moves.append(move)
+
+    moves_str = " ".join(moves)
+    position_cmd = f"position startpos moves {moves_str}\n"
+
+    print(position_cmd)
+
+    # Send to engine 2
+    engine2.stdin.write(position_cmd)
+    engine2.stdin.flush()
+    engine2.stdin.write("go\n")
+    engine2.stdin.flush()
+    
+    line = engine2.stdout.readline()
+    if not line:
+        print("Broke")
+        break
+    #print("Engine2 says:", line.strip())
+    
+    line = line.strip()
+    if line.startswith("bestmove"):
+        move = line.split()[1]
+    
+        moves.append(move)
 
 # --- Functions ---
 def move_piece(move, board):
@@ -73,6 +131,8 @@ def draw_board(ax, board):
     ax.axis('on')
 
 # --- Animation ---
+sleep(2)
+
 fig, ax = plt.subplots(figsize=(6,6))
 move_index = [0]  # mutable container for FuncAnimation
 
@@ -82,14 +142,5 @@ def update(frame):
         move_index[0] += 1
     draw_board(ax, board)
 
-ani = FuncAnimation(fig, update, frames=len(moves)+1, interval=1000, repeat=False)
+ani = FuncAnimation(fig, update, frames=len(moves)+1, interval=300, repeat=False)
 plt.show()
-
-engine.stdin.write("go\n")
-engine.stdin.flush()
-
-while True:
-    line = engine.stdout.readline()
-    if not line:
-        break
-    print("Engine says:", line.strip())
