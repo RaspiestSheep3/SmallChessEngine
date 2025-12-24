@@ -61,11 +61,15 @@ for i in range(100):
     engine.stdin.write("go\n")
     engine.stdin.flush()
     
+    if engine.poll() is not None:
+        print("Engine exited")
+        break
+        
     line = engine.stdout.readline()
+    print("Engine1 says:", line.strip())
     if not line:
         print("Broke")
         break
-    #print("Engine1 says:", line.strip())
     
     #Processing the move 
     line = line.strip()
@@ -85,11 +89,15 @@ for i in range(100):
     engine2.stdin.write("go\n")
     engine2.stdin.flush()
     
+    if engine2.poll() is not None:
+        print("Engine 2 exited")
+        break
+    
     line = engine2.stdout.readline()
+    print("Engine2 says:", line.strip())
     if not line:
         print("Broke")
         break
-    #print("Engine2 says:", line.strip())
     
     line = line.strip()
     if line.startswith("bestmove"):
@@ -131,8 +139,6 @@ def draw_board(ax, board):
     ax.axis('on')
 
 # --- Animation ---
-sleep(2)
-
 fig, ax = plt.subplots(figsize=(6,6))
 move_index = [0]  # mutable container for FuncAnimation
 
@@ -141,6 +147,6 @@ def update(frame):
         move_piece(moves[move_index[0]], board)
         move_index[0] += 1
     draw_board(ax, board)
-
+    
 ani = FuncAnimation(fig, update, frames=len(moves)+1, interval=300, repeat=False)
 plt.show()

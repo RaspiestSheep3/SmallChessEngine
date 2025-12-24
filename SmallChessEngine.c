@@ -27,6 +27,13 @@ void ShowBoard(int positions[8][8]) {
     return;
 }
 
+void FindTargetedSquares(MoveList *list, bool targetedSquares[8][8]) {
+    for(int i = 0; i < list->count; i++) {
+        ValidMove targetedMove = list->moves[i];
+        if(targetedMove.flags == 1) targetedSquares[targetedMove.endRow][targetedMove.endCol] = true;
+    }
+}
+
 void GenerateMovesFromOffset(bool isWhite, int positions[8][8], int startRow, int startCol, int offsetRow, int offsetCol, MoveList *list,int base,int cap, bool canCapture) {
     for(int k = base; k <= cap; k++) {
 
@@ -57,7 +64,6 @@ void GenerateMovesFromOffset(bool isWhite, int positions[8][8], int startRow, in
         }
     }
 }
-
 
 void FindAllValidMoves(bool isWhite, int positions[8][8], MoveList *list) {
 
@@ -172,13 +178,230 @@ void ResetBoard(int positions[8][8]) {
             positions[i][j] = newBoard[i][j];
 }
 
+void FlipMap(float original[8][8], float out[8][8]) {
+    for(int i = 0; i < 8; i++){
+        for(int j = 0; j < 8; j++) out[i][j] = original[7-i][j];
+    }
+}
+
+//Eval function
+float EvaluatePosition(int positions[8][8]) {
+    //Very basic eval
+    //Defining costs
+    float costs[6] = {1, 5, 3, 3.5, 9, 10000}; //King is defined as 10k because if the king can be captured its a win
+    //People also seem to value bhishops over knights so Ive rewarded having them a bit more
+    //I believe that knights are better but o well
+
+    float whiteEval = 0;
+    float blackEval = 0;
+
+    for(int i = 0; i < 8; i++){
+        for(int j = 0; j < 8; j++) {
+            if(positions[i][j] > 9) blackEval += costs[positions[i][j] % 9 - 1];
+            else if(positions[i][j] > 0) whiteEval += costs[positions[i][j] - 1];
+        }
+    }
+
+    //Punishing for having the king surrounded with squares it cant run to - smothered or targeted
+    //To do this we need to track white squares are targeted and which squares have the king
+    //Im going to give a fairly harsh penalty for having the king
+    //However, I intend for this to increase linearly as the number of pieces decreases
+    //ATM it does not increase at all
+    //TODO
+
+    //Reward for mobility
+    float mobilityMult = 0.01; //Assuming avg 35 moves per side this rewards 1.75 aka 1/2 a knight
+    //Ignore prev comment, im toning it down so it plays samrter
+    
+    MoveList whiteMoves = {0};
+    FindAllValidMoves(true, positions, &whiteMoves);
+
+    MoveList blackMoves = {0};
+    FindAllValidMoves(false, positions, &blackMoves);
+
+    whiteEval += mobilityMult * whiteMoves.count;
+    blackEval += mobilityMult * blackMoves.count;
+
+    //Position maps - we reward the bot for having pieces in good positions
+    //These are likely to be subject to a lot of change
+    //TODO reward passed pawns
+    float pawnMap[8][8] = {
+        {3.000,3.000,3.000,3.000,3.000,3.000,3.000,3.000},
+        {0.060,0.080,0.090,0.100,0.100,0.090,0.080,0.060},
+        {0.030,0.040,0.045,0.050,0.050,0.045,0.040,0.030},
+        {0.010,0.015,0.025,0.030,0.030,0.025,0.015,0.010},
+        {0.005,0.010,0.015,0.025,0.025,0.015,0.010,0.005},
+        {0.001,0.002,0.005,0.010,0.010,0.005,0.002,0.001},
+        {0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000},
+        {0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000},
+    };
+
+    //I dont really think that this is so important for rooks
+    float rookMap[8][8] = {
+        {0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000},
+        {0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000},
+        {0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000},
+        {0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000},
+        {0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000},
+        {0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000},
+        {0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000},
+        {0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000},
+    };
+
+    //Knights want to be centralised
+    float knightMap[8][8] = {
+        {-0.015,-0.010,-0.010,-0.005,-0.005,-0.010,-0.010,-0.015},
+        {-0.010,0.000,0.000,0.015,0.015,0.000,0.000,-0.010},
+        {-0.010,0.000,0.015,0.030,0.030,0.015,0.000,-0.010},
+        {-0.005,0.015,0.030,0.040,0.040,0.030,0.015,-0.005},
+        {-0.005,0.015,0.030,0.040,0.040,0.030,0.015,-0.005},
+        {-0.010,0.000,0.015,0.030,0.030,0.015,0.000,-0.010},
+        {-0.010,0.000,0.000,0.015,0.015,0.000,0.000,-0.010},
+        {-0.015,-0.010,-0.010,-0.005,-0.005,-0.010,-0.010,-0.015},
+    };
+
+    //This is being copied over from the knight map
+    float bishopMap[8][8] = {
+        {-0.015,-0.010,-0.010,-0.005,-0.005,-0.010,-0.010,-0.015},
+        {-0.010,0.000,0.000,0.015,0.015,0.000,0.000,-0.010},
+        {-0.010,0.000,0.015,0.030,0.030,0.015,0.000,-0.010},
+        {-0.005,0.015,0.030,0.040,0.040,0.030,0.015,-0.005},
+        {-0.005,0.015,0.030,0.040,0.040,0.030,0.015,-0.005},
+        {-0.010,0.000,0.015,0.030,0.030,0.015,0.000,-0.010},
+        {-0.010,0.000,0.000,0.015,0.015,0.000,0.000,-0.010},
+        {-0.015,-0.010,-0.010,-0.005,-0.005,-0.010,-0.010,-0.015},
+    };
+
+    //This is also a copy of the knight map
+    float queenMap[8][8] = {
+        {-0.015,-0.010,-0.010,-0.005,-0.005,-0.010,-0.010,-0.015},
+        {-0.010,0.000,0.000,0.015,0.015,0.000,0.000,-0.010},
+        {-0.010,0.000,0.015,0.030,0.030,0.015,0.000,-0.010},
+        {-0.005,0.015,0.030,0.040,0.040,0.030,0.015,-0.005},
+        {-0.005,0.015,0.030,0.040,0.040,0.030,0.015,-0.005},
+        {-0.010,0.000,0.015,0.030,0.030,0.015,0.000,-0.010},
+        {-0.010,0.000,0.000,0.015,0.015,0.000,0.000,-0.010},
+        {-0.015,-0.010,-0.010,-0.005,-0.005,-0.010,-0.010,-0.015},
+    };
+
+    //Kings want to be on the ends so im taking the negative of the knight map
+    //TODO - Make a lategame map and interpolate
+    float kingMap[8][8] = {
+        {+0.015,+0.010,+0.010,+0.005,+0.005,+0.010,+0.010,+0.015},
+        {+0.010,-0.000,-0.000,-0.015,-0.015,-0.000,-0.000,+0.010},
+        {+0.010,-0.000,-0.015,-0.030,-0.030,-0.015,-0.000,+0.010},
+        {+0.005,-0.015,-0.030,-0.040,-0.040,-0.030,-0.015,+0.005},
+        {+0.005,-0.015,-0.030,-0.040,-0.040,-0.030,-0.015,+0.005},
+        {+0.010,-0.000,-0.015,-0.030,-0.030,-0.015,-0.000,+0.010},
+        {+0.010,-0.000,-0.000,-0.015,-0.015,-0.000,-0.000,+0.010},
+        {+0.015,+0.010,+0.010,+0.005,+0.005,+0.010,+0.010,+0.015},
+    };
+
+    float flipMap[8][8] = {0};
+
+    for(int i = 0; i < 8; i++){
+        for(int j = 0; j < 8; j++){
+            int target = positions[i][j];
+            if(target == 0) continue;
+            
+            float (*map)[8] = NULL;
+
+            if(target % 9 == 1)      map = pawnMap;
+            else if(target % 9 == 2) map = rookMap;
+            else if(target % 9 == 3) map = knightMap;
+            else if(target % 9 == 4) map = bishopMap;
+            else if(target % 9 == 5) map = queenMap;
+            else if(target % 9 == 6) map = kingMap;
+
+            if(target > 9) FlipMap(map, flipMap);
+            else memcpy(flipMap, map, sizeof(float) * 64);
+
+            if(target < 9) whiteEval += flipMap[i][j];
+            else blackEval += flipMap[i][j];
+        }
+    }
+
+    return whiteEval - blackEval; //+ve = white winning, -ve = black winning
+}
+
 void FindBestMove(int positions[8][8], char *out, bool isWhite){
     MoveList availableMoves = {0};
     FindAllValidMoves(isWhite, positions, &availableMoves);
+    
+    float evals[256]= {0};
 
-    //Parsing the 1st move we find
+    for(int i = 0; i < availableMoves.count; i++) {
+        ValidMove move = availableMoves.moves[i];
 
-    ValidMove chosenMove = availableMoves.moves[0];
+        int positionsAlt[8][8];    
+        memcpy(positionsAlt, positions, sizeof(int) * 64);
+
+        //Making the move on the alt
+        positionsAlt[move.endRow][move.endCol] = move.pieceLabel;
+        positionsAlt[move.startRow][move.startCol] = 0;
+
+        //Making every single opposites move
+        MoveList availableOtherMoves = {0};
+        FindAllValidMoves(!isWhite, positionsAlt, &availableOtherMoves);
+
+        //Checking if one of their moves threatens our king - if it does we cant play this move
+        bool targetedSquaresAlt[8][8] = {false};
+        FindTargetedSquares(&availableOtherMoves, targetedSquaresAlt);
+
+        //Finding our king
+        int kingPosition[2]= {0,0};
+        bool found = false;
+        for(int i = 0; i < 8 && !found; i++){
+            for(int j = 0; j < 8; j++) {
+                if((isWhite && positionsAlt[i][j] == 6) || (!isWhite && positionsAlt[i][j] == 15)){
+                    kingPosition[0] = i;
+                    kingPosition[1] = j;
+                    found = true;
+                    break;
+                }
+            }
+        }
+
+        if(targetedSquaresAlt[kingPosition[0]][kingPosition[1]]) {
+            evals[i] = -1000000000000000; //We are in check so we cant play this move
+            continue;
+        }
+
+        //Playing all of others moves
+        float worstEval = 10000000000000;
+        for(int j = 0; j < availableOtherMoves.count; j++) {
+            int positionsAlt2[8][8];
+            ValidMove otherMove = availableOtherMoves.moves[j];
+
+            memcpy(positionsAlt2, positionsAlt, sizeof(int) * 64);
+
+            //Making the move on the alt
+            positionsAlt2[otherMove.endRow][otherMove.endCol] = otherMove.pieceLabel;
+            positionsAlt2[otherMove.startRow][otherMove.startCol] = 0;
+            
+            //Getting an eval for this move combo
+            float eval = EvaluatePosition(positionsAlt2);
+            if(!isWhite) eval *= -1;
+
+            if(eval < worstEval) worstEval = eval;
+        }
+
+        evals[i] = worstEval;
+    }
+
+    //Finding the best move
+    int index = 0;
+    float maxEval = -1000000000000000;
+    for(int i = 0; i < availableMoves.count; i++) {
+        
+        if(maxEval < evals[i]) {
+            maxEval = evals[i];
+            index = i;
+        }
+    }
+
+    ValidMove chosenMove = availableMoves.moves[index];
+
     
     out[0] = 'a' + chosenMove.startCol;
     out[1] = '8' - chosenMove.startRow;
@@ -188,7 +411,7 @@ void FindBestMove(int positions[8][8], char *out, bool isWhite){
 }
 
 int main(void) {
-    char input[256];
+    char input[4096];
 
     bool isWhite = true;
 
@@ -234,6 +457,7 @@ int main(void) {
             char move[5];
             FindBestMove(positions,move, isWhite);
             printf("bestmove %s\n", move);
+            fflush(stdout); 
         } 
         
         else if(strcmp(input, "quit") == 0) return 0;
@@ -247,6 +471,6 @@ int main(void) {
 
 }
 
-//CD Command : C:\\Users\\iniga\\source\\repos\\SmallChessEngine
+//CD Command : cd C:\\Users\\iniga\\source\\repos\\SmallChessEngine
 //GCC Command : gcc -Os -s -o engine.exe SmallChessEngine.c
 //UPX command : C:\\Users\\iniga\\UPX\\upx-5.0.2-win64\\upx.exe upx --best --ultra-brute engine.exe
