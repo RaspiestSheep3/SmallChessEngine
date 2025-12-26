@@ -8,7 +8,8 @@ typedef struct {
     int endRow;
     int endCol;
     int pieceLabel;
-    int flags; //1 = capture, 2 = promotion, 3 = check
+    int flags; //1 = capture
+    int promotionMarker; //1 - rook, 2 = knight, 3 = bishop, 4 = queen for promotions
 } ValidMove;
 
 typedef struct {
@@ -45,7 +46,7 @@ void GenerateMovesFromOffset(bool isWhite, int positions[8][8], int startRow, in
         if((positions[startRow + offset[0]][startCol + offset[1]] > 9 && isWhite) || (positions[startRow + offset[0]][startCol + offset[1]] < 9 && positions[startRow + offset[0]][startCol + offset[1]]> 0 && !isWhite)) {
             //We have hit the opponent
             if(canCapture){
-                list->moves[list->count++] = (ValidMove){startRow, startCol, startRow + offset[0], startCol + offset[1] ,positions[startRow][startCol], 1};
+                list->moves[list->count++] = (ValidMove){startRow, startCol, startRow + offset[0], startCol + offset[1] ,positions[startRow][startCol], 1, 0};
                 //printf("We have hit opponent at %d %d for piece type %d\n", startRow + offset[0], startCol + offset[1], positions[startRow][startCol]);
             }
             break;
@@ -60,7 +61,15 @@ void GenerateMovesFromOffset(bool isWhite, int positions[8][8], int startRow, in
 
         else {
             //We have hit an empty space
-            list->moves[list->count++] = (ValidMove){startRow, startCol, startRow + offset[0], startCol + offset[1] ,positions[startRow][startCol], 0};
+            if(positions[startRow][startCol] % 9 == 1) {
+                //Dealing with promotion nonsense
+                if((positions[startRow][startCol] == 1 && (startRow + offset[0]) == 0) || (positions[startRow][startCol] == 10 && (startRow + offset[0]) == 7)) {
+                    for(int l = 1; l < 5; l++) list->moves[list->count++] = (ValidMove){startRow, startCol, startRow + offset[0], startCol + offset[1] ,positions[startRow][startCol], 0, l};
+                }
+                //Else no promotion - work as normal
+                else list->moves[list->count++] = (ValidMove){startRow, startCol, startRow + offset[0], startCol + offset[1] ,positions[startRow][startCol], 0, 0};
+            }
+            else list->moves[list->count++] = (ValidMove){startRow, startCol, startRow + offset[0], startCol + offset[1] ,positions[startRow][startCol], 0, 0};
         }
     }
 }
@@ -89,12 +98,35 @@ void FindAllValidMoves(bool isWhite, int positions[8][8], MoveList *list) {
                 //Custom dealing with captures because its easier
 
                 if(isWhite && i > 0) {
-                    if(j > 0 && positions[i-1][j-1] > 9) list->moves[list->count++] = (ValidMove){i, j, i-1, j-1 ,positions[i][j], 1};
-                    if(j < 7 && positions[i-1][j+1] > 9) list->moves[list->count++] = (ValidMove){i, j, i-1, j+1 ,positions[i][j], 1};
+
+                    if(j > 0 && positions[i-1][j-1] > 9){
+                        if(i-1 == 0) {
+                            //Promotion stuff
+                            for(int l = 1; l < 5; l++) list->moves[list->count++] = (ValidMove){i, j, i-1, j-1 ,positions[i][j], 1, l};
+                        }
+                        else list->moves[list->count++] = (ValidMove){i, j, i-1, j-1 ,positions[i][j], 1, 0};
+                    } 
+                    if(j < 7 && positions[i-1][j+1] > 9) {
+                        if(i-1 == 0) {
+                            //Promotion stuff
+                            for(int l = 1; l < 5; l++) list->moves[list->count++] = (ValidMove){i, j, i-1, j+1 ,positions[i][j], 1, l};
+                        }
+                        else list->moves[list->count++] = (ValidMove){i, j, i-1, j+1 ,positions[i][j], 1, 0};
+                    }
                 }
                 else if(!isWhite && i < 7) {
-                    if(j > 0 && positions[i+1][j-1] < 10 && positions[i+1][j-1] > 0) list->moves[list->count++] = (ValidMove){i, j, i+1, j-1 ,positions[i][j], 1};
-                    if(j < 7 && positions[i+1][j+1] < 10 && positions[i+1][j+1] > 0) list->moves[list->count++] = (ValidMove){i, j, i+1, j+1 ,positions[i][j], 1};
+                    if(j > 0 && positions[i+1][j-1] < 10 && positions[i+1][j-1] > 0){
+                        if(i+1 == 7){
+                            for(int l = 1; l < 5; l++) list->moves[list->count++] = (ValidMove){i, j, i+1, j-1 ,positions[i][j], 1, l};
+                        }
+                        else list->moves[list->count++] = (ValidMove){i, j, i+1, j-1 ,positions[i][j], 1, 0};
+                    }
+                    if(j < 7 && positions[i+1][j+1] < 10 && positions[i+1][j+1] > 0){
+                        if(i+1 == 7){
+                            for(int l = 1; l < 5; l++) list->moves[list->count++] = (ValidMove){i, j, i+1, j+1 ,positions[i][j], 1, l};
+                        }
+                        else list->moves[list->count++] = (ValidMove){i, j, i+1, j+1 ,positions[i][j], 1, 0};
+                    }
                 }
             }
             else if(pieceType == 2) {
@@ -236,19 +268,19 @@ float EvaluatePosition(int positions[8][8]) {
         {0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000},
     };
 
-    //I dont really think that this is so important for rooks
+    //Copied from knight again but adding extra punishment for starting squares
     float rookMap[8][8] = {
-        {0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000},
-        {0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000},
-        {0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000},
-        {0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000},
-        {0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000},
-        {0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000},
-        {0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000},
-        {0.000,0.000,0.000,0.000,0.000,0.000,0.000,0.000},
+        {-0.015,-0.010,-0.010,-0.005,-0.005,-0.010,-0.010,-0.015},
+        {-0.010,0.000,0.000,0.015,0.015,0.000,0.000,-0.010},
+        {-0.010,0.000,0.015,0.030,0.030,0.015,0.000,-0.010},
+        {-0.005,0.015,0.030,0.040,0.040,0.030,0.015,-0.005},
+        {-0.005,0.015,0.030,0.040,0.040,0.030,0.015,-0.005},
+        {-0.010,0.000,0.015,0.030,0.030,0.015,0.000,-0.010},
+        {-0.010,0.000,0.000,0.015,0.015,0.000,0.000,-0.010},
+        {-0.020,-0.010,-0.010,-0.005,-0.005,-0.010,-0.010,-0.020},
     };
 
-    //Knights want to be centralised
+    //Knights want to be centralised but adding extra punishment for starting squares
     float knightMap[8][8] = {
         {-0.015,-0.010,-0.010,-0.005,-0.005,-0.010,-0.010,-0.015},
         {-0.010,0.000,0.000,0.015,0.015,0.000,0.000,-0.010},
@@ -257,10 +289,10 @@ float EvaluatePosition(int positions[8][8]) {
         {-0.005,0.015,0.030,0.040,0.040,0.030,0.015,-0.005},
         {-0.010,0.000,0.015,0.030,0.030,0.015,0.000,-0.010},
         {-0.010,0.000,0.000,0.015,0.015,0.000,0.000,-0.010},
-        {-0.015,-0.010,-0.010,-0.005,-0.005,-0.010,-0.010,-0.015},
+        {-0.015,-0.020,-0.010,-0.005,-0.005,-0.010,-0.020,-0.015},
     };
 
-    //This is being copied over from the knight map
+    //This is being copied over from the knight map but adding extra punishment for starting squares
     float bishopMap[8][8] = {
         {-0.015,-0.010,-0.010,-0.005,-0.005,-0.010,-0.010,-0.015},
         {-0.010,0.000,0.000,0.015,0.015,0.000,0.000,-0.010},
@@ -269,10 +301,10 @@ float EvaluatePosition(int positions[8][8]) {
         {-0.005,0.015,0.030,0.040,0.040,0.030,0.015,-0.005},
         {-0.010,0.000,0.015,0.030,0.030,0.015,0.000,-0.010},
         {-0.010,0.000,0.000,0.015,0.015,0.000,0.000,-0.010},
-        {-0.015,-0.010,-0.010,-0.005,-0.005,-0.010,-0.010,-0.015},
+        {-0.015,-0.010,-0.020,-0.005,-0.005,-0.020,-0.010,-0.015},
     };
 
-    //This is also a copy of the knight map
+    //This is also a copy of the knight map without start pushiment
     float queenMap[8][8] = {
         {-0.015,-0.010,-0.010,-0.005,-0.005,-0.010,-0.010,-0.015},
         {-0.010,0.000,0.000,0.015,0.015,0.000,0.000,-0.010},
@@ -337,7 +369,7 @@ void FindBestMove(int positions[8][8], char *out, bool isWhite){
         memcpy(positionsAlt, positions, sizeof(int) * 64);
 
         //Making the move on the alt
-        positionsAlt[move.endRow][move.endCol] = move.pieceLabel;
+        positionsAlt[move.endRow][move.endCol] = move.pieceLabel + move.promotionMarker; //This should properly deal with promostions beacuse most of the time we just add 0
         positionsAlt[move.startRow][move.startCol] = 0;
 
         //Making every single opposites move
@@ -376,10 +408,12 @@ void FindBestMove(int positions[8][8], char *out, bool isWhite){
             memcpy(positionsAlt2, positionsAlt, sizeof(int) * 64);
 
             //Making the move on the alt
-            positionsAlt2[otherMove.endRow][otherMove.endCol] = otherMove.pieceLabel;
+            positionsAlt2[otherMove.endRow][otherMove.endCol] = otherMove.pieceLabel + otherMove.promotionMarker;
             positionsAlt2[otherMove.startRow][otherMove.startCol] = 0;
             
             //Getting an eval for this move combo
+
+            //!FOR THE MOMENT I AM USING 3, 3
             float eval = EvaluatePosition(positionsAlt2);
             if(!isWhite) eval *= -1;
 
@@ -401,13 +435,25 @@ void FindBestMove(int positions[8][8], char *out, bool isWhite){
     }
 
     ValidMove chosenMove = availableMoves.moves[index];
-
     
     out[0] = 'a' + chosenMove.startCol;
     out[1] = '8' - chosenMove.startRow;
     out[2] = 'a' + chosenMove.endCol;
     out[3] = '8' - chosenMove.endRow;
-    out[4] = '\0';
+
+    if (chosenMove.promotionMarker) {
+        char promoChar = 'q';
+        if (chosenMove.promotionMarker == 1) promoChar = 'r';
+        else if (chosenMove.promotionMarker == 2) promoChar = 'n';
+        else if (chosenMove.promotionMarker == 3) promoChar = 'b';
+        else if (chosenMove.promotionMarker == 4) promoChar = 'q';
+
+        out[4] = promoChar;
+        out[5] = '\0';
+    } 
+    else {
+        out[4] = '\0';
+    }
 }
 
 int main(void) {
@@ -437,25 +483,40 @@ int main(void) {
 
         if (strcmp(input, "uci") == 0) printf("id name Mercury\nauthor RS3\nuciok\n");
         else if (strcmp(input, "isready") == 0) printf("readyok\n"); 
-        else if(strncmp(input, "position startpos moves", 23) == 0 && strlen(input) > 17) {
+        else if(strncmp(input, "position startpos moves", 23) == 0 && strlen(input) > 23) {
             //We need to update the position accordingly
             char* update = input + 23 + 1;
 
             ResetBoard(positions);
             isWhite = true;
             
-            //Every entry is of size 4, with a spacer of 1
-            for(int i = 0; i < strlen(update); i+=5) {
-                isWhite = !isWhite;
+           //Dividing up the rest of the moves and applying them
+           char * token = strtok(update, " ");
+           while(token != NULL) {
 
-                positions['8'- update[i + 3]][update[i + 2] - 'a'] = positions['8' - update[i + 1]][update[i] - 'a'];
-                positions['8'- update[i + 1]][update[i] - 'a'] = 0;
+                isWhite = !isWhite;
+                //Appling the move
+                //Standard move
+                positions['8'-token[3]][token[2] - 'a'] = positions['8' - token[1]][token[0] - 'a'];
+                positions['8' - token[1]][token[0] - 'a'] = 0;
+
+                if(strlen(token) == 5) {
+                    int base = isWhite ? 1 : 10;
+                    //Promoting the pawn
+                    if(token[4] == 'q') positions['8'-token[3]][token[2] - 'a'] = 4 + base;
+                    else if(token[4] == 'b') positions['8'-token[3]][token[2] - 'a'] = 3 + base;
+                    else if(token[4] == 'n') positions['8'-token[3]][token[2] - 'a'] = 2 + base;
+                    else if(token[4] == 'r') positions['8'-token[3]][token[2] - 'a'] = 1 + base;
+                }
+
+                token = strtok(NULL, " ");
             }
         }
 
         else if(strcmp(input, "go") == 0){
-            char move[5];
+            char move[6];
             FindBestMove(positions,move, isWhite);
+            //ShowBoard(positions);
             printf("bestmove %s\n", move);
             fflush(stdout); 
         } 
@@ -463,7 +524,6 @@ int main(void) {
         else if(strcmp(input, "quit") == 0) return 0;
 
          //!TEMP 
-        //ShowBoard(positions);
 
 
         fflush(stdout); 
